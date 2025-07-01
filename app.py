@@ -117,6 +117,106 @@ def login_user():
             "status_code": 401
         }), 401
 
+# --- 获取个人信息 API (GET /users/<user_id>) ---
+@app.route('/users/<int:user_id>', methods=['GET'])
+def get_user_info(user_id):
+    # 根据 user_id 查询用户
+    user = User.query.get(user_id)
+
+    if user:
+        # 如果找到用户，返回用户信息
+        return jsonify({
+            "message": "获取用户成功",
+            "data": {
+                "user_id": user.id,
+                "username": user.username,
+                "email": user.email
+                # 根据 User 模型中实际存储的字段，添加更多信息
+                # "height": user.height,
+                # "weight": user.weight,
+                # "age": user.age
+            },
+            "status_code": 200
+        }), 200 # 200 OK
+    else:
+        # 如果未找到用户
+        return jsonify({
+            "error": "Not Found",
+            "message": "未找到指定ID的用户。",
+            "status_code": 404
+        }), 404 # 404 Not Found
+
+# --- 更新个人信息 API (PUT /users/<user_id>) ---
+@app.route('/users/<int:user_id>', methods=['PUT'])
+def update_user_info(user_id):
+    # 根据 user_id 查询用户
+    user = User.query.get(user_id)
+
+    if not user:
+        # 如果未找到用户
+        return jsonify({
+            "error": "Not Found",
+            "message": "未找到指定ID的用户。",
+            "status_code": 404
+        }), 404 # 404 Not Found
+
+    data = request.get_json() # 获取前端发送的 JSON 数据
+
+    # 允许更新的字段，根据您的 User 模型实际字段来调整
+    # 注意：通常不建议直接通过这个接口更新密码，密码更新应该有单独的接口
+    # 并且，用户名和邮箱的更新也可能需要额外的唯一性验证和流程
+    if 'username' in data:
+        # 如果尝试更新用户名，需要进行唯一性校验
+        new_username = data['username']
+        if new_username != user.username and User.query.filter_by(username=new_username).first():
+            return jsonify({
+                "error": "Conflict",
+                "message": "新用户名已被占用。",
+                "status_code": 409
+            }), 409
+        user.username = new_username
+
+    if 'email' in data:
+        # 如果尝试更新邮箱，需要进行唯一性校验
+        new_email = data['email']
+        if new_email != user.email and User.query.filter_by(email=new_email).first():
+            return jsonify({
+                "error": "Conflict",
+                "message": "新邮箱已被占用。",
+                "status_code": 409
+            }), 409
+        user.email = new_email
+
+    # 根据您的 User 模型，可以添加更多可更新的字段
+    if 'height' in data:
+         user.height = data['height']
+    if 'weight' in data:
+         user.weight = data['weight']
+    if 'age' in data:
+         user.age = data['age']
+    if 'fitness_goal' in data:
+         user.fitness_goal = data['fitness_goal']
+
+    try:
+        db.session.commit() # 提交更改到数据库
+        return jsonify({
+            "message": "用户信息更新成功！",
+            "data": {
+                "user_id": user.id,
+                "username": user.username,
+                "email": user.email
+                # 返回更新后的最新用户信息
+            },
+            "status_code": 200
+        }), 200 # 200 OK
+    except Exception as e:
+        db.session.rollback() # 如果发生错误，回滚事务
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": f"用户信息更新失败：{str(e)}",
+            "status_code": 500
+        }), 500
+
 
 # --- 应用启动入口 ---
 if __name__ == '__main__':
