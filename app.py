@@ -1,56 +1,125 @@
+import os
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
-import os
+from models import db, User
 
-# 1. 初始化 Flask 应用
+# --- Flask 应用配置 ---
 app = Flask(__name__)
 
-# 2. 配置数据库
-# __file__ 获取当前文件路径，os.path.abspath 获取绝对路径
-# os.path.dirname 获取目录路径，os.path.join 拼接路径
-# SQLite 数据库文件将存放在项目根目录
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(app.root_path, 'smart_fitness.db')
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False # 禁用跟踪对象修改的通知
+# 配置 SQLite 数据库文件路径
+# os.path.abspath(__file__) 获取当前文件（app.py）的绝对路径
+# os.path.dirname() 获取该文件所在的目录
+# os.path.join() 拼接路径，将 smart_fitness.db 放在项目根目录下
+basedir = os.path.abspath(os.path.dirname(__file__))
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'smart_fitness.db')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False # 禁用事件追踪，减少内存消耗
 
-db = SQLAlchemy(app)
+#将从 models.py 导入的 db 对象与 app 实例绑定
+db.init_app(app)
 
-# 3. 定义数据库模型 (例如 用户模型)
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(120), nullable=False) # 简化，实际应使用更长的哈希值
-    email = db.Column(db.String(120), unique=True, nullable=False)
 
-    def __repr__(self):
-        return f'<User {self.username}>'
 
-# 4. 创建数据库表 (在应用启动时执行一次)
-# 注意：首次运行此代码时，会创建 smart_fitness.db 数据库文件和 users 表。
-# 之后再次运行，如果表已存在，不会重复创建。
+# --- 数据库创建/更新 ---
+# 在应用上下文启动时创建所有数据库表
 with app.app_context():
     db.create_all()
 
-# 5. 定义一个简单的API路由 (示例：注册用户)
+
+# --- API 接口定义 ---
+
+# 用户注册 API (POST /register)
 @app.route('/register', methods=['POST'])
 def register_user():
+    data = request.get_json() # 获取前端发送的 JSON 数据
+    username = data.get('username')
+    email = data.get('email')
+    password = data.get('password')
+
+    # 1. 数据校验 (简单示例，实际项目需要更严格的验证，例如邮箱格式)
+    if not username or not email or not password:
+        return jsonify({
+            "error": "Bad Request",
+            "message": "用户名、邮箱和密码不能为空。",
+            "status_code": 400
+        }), 400
+
+    # 2. 验证用户名和邮箱的唯一性
+    if User.query.filter_by(username=username).first():
+        return jsonify({
+            "error": "Conflict",
+            "message": "用户名已被占用。",
+            "status_code": 409
+        }), 409
+    if User.query.filter_by(email=email).first():
+        return jsonify({
+            "error": "Conflict",
+            "message": "邮箱已被注册。",
+            "status_code": 409
+        }), 409
+
+    # 3. 创建新用户实例并保存到数据库
+    new_user = User(username=username, email=email)
+    new_user.set_password(password) # 使用 set_password 方法哈希密码
+
+    try:
+        db.session.add(new_user)
+        db.session.commit()
+        return jsonify({
+            "message": "用户注册成功！",
+            "data": {
+                "user_id": new_user.id,
+                "username": new_user.username
+            },
+            "status_code": 201
+        }), 201 # 201 Created
+    except Exception as e:
+        db.session.rollback() # 如果发生错误，回滚事务
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": f"注册失败：{str(e)}",
+            "status_code": 500
+        }), 500
+
+
+# 用户登录 API (POST /login)
+@app.route('/login', methods=['POST'])
+def login_user():
     data = request.get_json()
     username = data.get('username')
     password = data.get('password')
-    email = data.get('email')
 
-    if not username or not password or not email:
-        return jsonify({'message': 'Missing username, password or email'}), 400
+    # 1. 数据校验
+    if not username or not password:
+        return jsonify({
+            "error": "Bad Request",
+            "message": "用户名和密码不能为空。",
+            "status_code": 400
+        }), 400
 
-    if User.query.filter_by(username=username).first():
-        return jsonify({'message': 'Username already exists'}), 409
+    # 2. 查询 Users 表验证用户凭据
+    user = User.query.filter_by(username=username).first()
 
-    # 实际项目中，password 应进行哈希处理
-    new_user = User(username=username, password_hash=password, email=email) # 简化处理
-    db.session.add(new_user)
-    db.session.commit()
+    if user and user.check_password(password): # 使用 check_password 方法验证密码
+        # 登录成功，实际项目中这里通常会生成 session 或 JWT token
+        return jsonify({
+            "message": "登录成功！",
+            "data": {
+                "user_id": user.id,
+                "username": user.username
+            },
+            "status_code": 200
+        }), 200
+    else:
+        # 登录失败
+        return jsonify({
+            "error": "Unauthorized",
+            "message": "用户名或密码不正确。",
+            "status_code": 401
+        }), 401
 
-    return jsonify({'message': 'User registered successfully'}), 201
 
-# 6. 运行 Flask 应用
+# --- 应用启动入口 ---
 if __name__ == '__main__':
-    app.run(debug=True, port=5000) # port=5000 是默认端口，可以修改
+    # 确保您已安装所有依赖：pip install Flask Flask-SQLAlchemy Werkzeug
+    # 运行此文件即可启动 Flask 应用，并在控制台看到服务地址
+    app.run(debug=True, port=5000) # 开启调试模式，开发时方便查看错误和自动重载
