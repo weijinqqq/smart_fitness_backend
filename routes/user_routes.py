@@ -1,12 +1,16 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g, current_app
 from models import db, User # 导入 db 和 User 模型
 from werkzeug.security import generate_password_hash, check_password_hash
+from utils.auth_decorators import token_required
+import jwt # 导入 jwt 库
+import datetime # 导入 datetime 库
 
 # 创建一个蓝图实例
 user_bp = Blueprint('user_bp', __name__)
 
 # --- 用户注册 API ---
 @user_bp.route('/register', methods=['POST'])
+
 def register():
     # ... (这里放您之前在 app.py 里的注册 API 代码) ...
     # 注意：这里需要导入 models.py 中的 db 和 User
@@ -41,6 +45,7 @@ def register():
 
 # --- 用户登录 API ---
 @user_bp.route('/login', methods=['POST'])
+
 def login():
     # ... (这里放您之前在 app.py 里的登录 API 代码) ...
     data = request.get_json()
@@ -53,11 +58,18 @@ def login():
     user = User.query.filter_by(username=username).first()
 
     if user and check_password_hash(user.password_hash, password):
+        token_payload = {
+            'user_id': user.id,
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)  # Token 24小时后过期
+        }
+        # current_app.config['SECRET_KEY'] 从 app.py 中获取
+        token = jwt.encode(token_payload, current_app.config['SECRET_KEY'], algorithm='HS256')
         return jsonify({
             "message": "登录成功！",
             "data": {
                 "user_id": user.id,
-                "username": user.username
+                "username": user.username,
+                "access_token": token  # 返回 JWT token
             },
             "status_code": 200
         }), 200
@@ -66,10 +78,18 @@ def login():
 
 # --- 获取个人信息 API ---
 @user_bp.route('/users/<int:user_id>', methods=['GET'])
+@token_required # 认证用户
 def get_user_info(user_id):
     # ... (这里放您之前在 app.py 里的获取个人信息 API 代码) ...
+    current_user_id = g.user_id # 获取当前认证用户的ID
+    # 授权检查：确保认证用户只能获取自己的信息
+    if current_user_id != user_id:
+        return jsonify({
+            "error": "Forbidden",
+            "message": "无权访问其他用户的信息。",
+            "status_code": 403
+        }), 403
     user = User.query.get(user_id)
-
     if user:
         return jsonify({
             "message": "获取用户成功",
@@ -89,8 +109,18 @@ def get_user_info(user_id):
 
 # --- 更新个人信息 API ---
 @user_bp.route('/users/<int:user_id>', methods=['PUT'])
+@token_required # 认证用户
 def update_user_info(user_id):
-    # ... (这里放您之前在 app.py 里的更新个人信息 API 代码) ...
+    current_user_id = g.user_id  # 获取当前认证用户的ID
+
+    # 授权检查：确保认证用户只能更新自己的信息
+    if current_user_id != user_id:
+        return jsonify({
+            "error": "Forbidden",
+            "message": "无权更新其他用户的信息。",
+            "status_code": 403
+        }), 403
+
     user = User.query.get(user_id)
 
     if not user:

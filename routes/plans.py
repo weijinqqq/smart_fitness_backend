@@ -1,13 +1,15 @@
 #健身计划路由
+from utils.auth_decorators import token_required
+from flask import Blueprint, request, jsonify, g
+from models import FitnessPlan, db
 
-from flask import Blueprint, request, jsonify
-from app.models import FitnessPlan, db
-from app.utils import auth_required
 
 # 创建蓝图，用于组织健身计划相关路由
-bp = Blueprint('plans', __name__)
+plan_bp = Blueprint('plan_bp', __name__)
 
-@bp.route('/fitness_plans/preset', methods=['GET'])
+#---获取所有预设计划API---
+@plan_bp.route('/preset', methods=['GET'])
+
 def get_preset_plans():
     """
     获取系统预设健身计划API
@@ -28,8 +30,9 @@ def get_preset_plans():
             "message": str(e)
         }), 500
 
-@bp.route('/users/<int:user_id>/fitness_plans', methods=['POST'])
-@auth_required
+#---为用户创建计划API---
+@plan_bp.route('/users/<int:user_id>', methods=['POST'])
+@token_required # 认证用户
 def create_or_select_plan(user_id):
     """
     用户创建或选择健身计划API
@@ -38,7 +41,7 @@ def create_or_select_plan(user_id):
     2. 创建新计划: 提供plan_name和content
     """
     # 验证请求用户只能操作自己的数据
-    current_user_id = getattr(request, 'current_user_id', None)
+    current_user_id = g.user_id
     if user_id != current_user_id:
         return jsonify({
             "error": "Unauthorized",
@@ -75,6 +78,12 @@ def create_or_select_plan(user_id):
             )
         else:
             # 用户创建全新计划
+            # 验证 plan_name 和 content 是否存在，因为上面已经判断了，这里可以简化
+            if 'plan_name' not in data or 'content' not in data:
+                return jsonify({
+                    "error": "Missing required fields",
+                    "message": "plan_name and content are required to create a new plan"
+                }), 400
             new_plan = FitnessPlan(
                 user_id=user_id,
                 plan_name=data['plan_name'],
@@ -99,15 +108,16 @@ def create_or_select_plan(user_id):
             "message": str(e)
         }), 500
 
-@bp.route('/users/<int:user_id>/fitness_plans', methods=['GET'])
-@auth_required
+#---获取用户健身计划API---
+@plan_bp.route('/users/<int:user_id>', methods=['GET'])
+@token_required # 认证用户
 def get_user_plans(user_id):
     """
     获取用户的所有健身计划API
     只返回用户自定义计划（非预设）
     """
     # 验证请求用户只能访问自己的数据
-    current_user_id = getattr(request, 'current_user_id', None)
+    current_user_id = g.user_id
     if user_id != current_user_id:
         return jsonify({
             "error": "Unauthorized",

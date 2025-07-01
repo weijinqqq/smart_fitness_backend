@@ -1,14 +1,14 @@
 #运动记录路由
-
-from flask import Blueprint, request, jsonify
-from app.models import Activity, db
-from app.utils import auth_required  # 导入认证装饰器
+from utils.auth_decorators import token_required #导入认证装饰器
+from flask import Blueprint, request, jsonify, g
+from models import Activity, db
 
 # 创建蓝图，用于组织运动记录相关路由
-bp = Blueprint('activities', __name__)
+activities_bp = Blueprint('activities_bp', __name__)
 
-@bp.route('/activities', methods=['POST'])
-@auth_required  # 需要认证的装饰器，保护API
+#---记录运动数据API---
+@activities_bp.route('/', methods=['POST'])
+@token_required
 def record_activity():
     """
     记录运动数据API
@@ -27,7 +27,8 @@ def record_activity():
     
     try:
         # 从认证装饰器中获取当前用户ID
-        user_id = getattr(request, 'current_user_id', None)
+        #user_id = getattr(request, 'current_user_id', None)
+        user_id = g.user_id
         
         # 创建新的运动记录对象
         new_activity = Activity(
@@ -55,15 +56,16 @@ def record_activity():
             "message": str(e)
         }), 500  # 500 Internal Server Error
 
-@bp.route('/users/<int:user_id>/activities', methods=['GET'])
-@auth_required
+#---获取用户所有运动记录API---
+@activities_bp.route('/users/<int:user_id>/activities', methods=['GET'])
+@token_required
 def get_user_activities(user_id):
     """
     获取用户运动历史API
     支持查询参数: type(运动类型), start_date(开始日期), end_date(结束日期)
     """
     # 验证请求用户只能访问自己的数据
-    current_user_id = getattr(request, 'current_user_id', None)
+    current_user_id = g.user_id # 获取当前认证用户的ID
     if user_id != current_user_id:
         return jsonify({
             "error": "Unauthorized",
