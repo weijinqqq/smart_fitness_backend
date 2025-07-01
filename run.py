@@ -1,3 +1,5 @@
+#主应用文件
+
 from app import create_app
 from app.models import db, User, Activity, FitnessPlan
 
