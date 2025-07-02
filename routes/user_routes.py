@@ -166,3 +166,43 @@ def update_user_info(user_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": "Internal Server Error", "message": f"用户信息更新失败：{str(e)}", "status_code": 500}), 500
+
+# --- 删除个人信息 API ---
+# 规范：DELETE /users/<user_id>
+@user_bp.route('/users/<int:user_id>', methods=['DELETE'])
+@token_required # 认证用户
+def delete_user(user_id):
+    """
+    删除指定用户账户API
+    响应: 200 OK 或 204 No Content 或错误信息
+    """
+    current_user_id = g.user_id # 获取当前认证用户的ID
+
+    # 授权检查：确保认证用户只能删除自己的账户
+    if current_user_id != user_id:
+        return jsonify({
+            "error": "Forbidden",
+            "message": "无权删除其他用户账户。",
+            "status_code": 403
+        }), 403
+
+    user = User.query.get(user_id)
+
+    if not user:
+        return jsonify({
+            "error": "Not Found",
+            "message": "未找到指定ID的用户。",
+            "status_code": 404
+        }), 404
+
+    try:
+        db.session.delete(user)
+        db.session.commit()
+        return jsonify({
+            "message": "用户账户删除成功！",
+            "status_code": 200
+        }), 200 # 也可以返回 204 No Content，但 200 并带消息更明确
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Database error", "message": f"用户账户删除失败：{str(e)}", "status_code": 500}), 500
+
