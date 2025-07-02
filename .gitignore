@@ -1,0 +1,15 @@
+# 默认忽略的文件
+/shelf/
+/workspace.xml
+
+# 虚拟环境目录
+.venv/
+venv/
+env/
+
+/.env.py
+
+instance/*.db
+*.db
+# IDE 配置文件 (例如 PyCharm)
+.idea/

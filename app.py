@@ -6,6 +6,7 @@ from routes.activities import activities_bp    # D 负责的运动记录模块
 from routes.plans import plan_bp     # D 负责的健身计划模块
 from routes.forum import forum_bp # 导入论坛蓝图
 from dotenv import load_dotenv
+from flask_migrate import Migrate #数据库迁移
 
 load_dotenv(dotenv_path='.env.py') #关于认证装饰的设置
 app = Flask(__name__)
@@ -18,6 +19,8 @@ if app.config['SECRET_KEY'] is None:
     raise RuntimeError("SECRET_KEY is not set in .env.py file or environment variables.")
 
 db.init_app(app) # 在这里将 db 对象与 app 实例绑定
+#初始化 Flask-Migrate
+migrate = Migrate(app, db)
 
 # 注册蓝图
 app.register_blueprint(user_bp) # <注册用户蓝图
@@ -28,8 +31,8 @@ app.register_blueprint(forum_bp) # 注册论坛蓝图
 
 
 # 数据库初始化 (通常在 app.py 启动时执行一次)
-with app.app_context():
-    db.create_all()
+#with app.app_context():
+    #db.create_all()
 
 # 如果有其他非 API 的普通路由，可以继续放在这里，但通常很少
 @app.route('/')
