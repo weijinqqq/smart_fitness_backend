@@ -7,7 +7,7 @@ from models import Activity, db
 activities_bp = Blueprint('activities_bp', __name__)
 
 #---记录运动数据API---
-@activities_bp.route('/', methods=['POST'])
+@activities_bp.route('/activities', methods=['POST'])
 @token_required
 def record_activity():
     """
@@ -36,6 +36,8 @@ def record_activity():
             activity_type=data['activity_type'],
             duration_minutes=data['duration_minutes'],
             calories_burned=data['calories_burned']
+            #activity_date 字段如果需要，也要从 data 中获取并传入
+            #activity_date=data.get('activity_date')
         )
         
         # 保存到数据库
@@ -92,9 +94,142 @@ def get_user_activities(user_id):
     
     # 执行查询
     activities = query.all()
-    
+
+    # 确保 Activity 模型有 to_dict() 方法
+    activities_list = []
+    for activity in activities:
+        activities_list.append({
+            "activity_id": activity.id,
+            "user_id": activity.user_id,
+            "activity_type": activity.activity_type,
+            "duration_minutes": activity.duration_minutes,
+            "calories_burned": activity.calories_burned,
+            "distance_km": activity.distance_km,
+            "activity_date": activity.activity_date.isoformat() if activity.activity_date else None
+        })
+
     # 返回结果
     return jsonify({
         "count": len(activities),
         "activities": [activity.to_dict() for activity in activities]
     }), 200  # 200 OK
+# --- 获取指定 ID 的运动记录 API ---
+# 规范：GET /activities/<activity_id>
+@activities_bp.route('/activities/<int:activity_id>', methods=['GET']) # <-- 修正这里，改为完整路径
+@token_required
+def get_activity_by_id(activity_id):
+    current_user_id = g.user_id
+
+    activity = Activity.query.get(activity_id)
+
+    if not activity:
+        return jsonify({
+            "error": "Not Found",
+            "message": "未找到指定ID的运动记录。",
+            "status_code": 404
+        }), 404
+
+    if activity.user_id != current_user_id:
+        return jsonify({
+            "error": "Forbidden",
+            "message": "无权访问该运动记录。",
+            "status_code": 403
+        }), 403
+
+    return jsonify({
+        "message": "获取运动记录成功！",
+        "data": {
+            "activity_id": activity.id,
+            "user_id": activity.user_id,
+            "activity_type": activity.activity_type,
+            "duration_minutes": activity.duration_minutes,
+            "calories_burned": activity.calories_burned,
+            "distance_km": activity.distance_km,
+            "activity_date": activity.activity_date.isoformat() if activity.activity_date else None
+        },
+        "status_code": 200
+    }), 200
+
+# --- 更新指定 ID 的运动记录 API ---
+# 规范：PUT /activities/<activity_id>
+@activities_bp.route('/activities/<int:activity_id>', methods=['PUT']) # <-- 修正这里，改为完整路径
+@token_required
+def update_activity_by_id(activity_id):
+    current_user_id = g.user_id
+
+    activity = Activity.query.get(activity_id)
+
+    if not activity:
+        return jsonify({
+            "error": "Not Found",
+            "message": "未找到指定ID的运动记录。",
+            "status_code": 404
+        }), 404
+
+    if activity.user_id != current_user_id:
+        return jsonify({
+            "error": "Forbidden",
+            "message": "无权更新该运动记录。",
+            "status_code": 403
+        }), 403
+
+    data = request.get_json()
+
+    try:
+        activity.activity_type = data.get('activity_type', activity.activity_type)
+        activity.duration_minutes = data.get('duration_minutes', activity.duration_minutes)
+        activity.calories_burned = data.get('calories_burned', activity.calories_burned)
+        activity.distance_km = data.get('distance_km', activity.distance_km)
+
+        db.session.commit()
+
+        return jsonify({
+            "message": "运动记录更新成功！",
+            "data": {
+                "activity_id": activity.id,
+                "user_id": activity.user_id,
+                "activity_type": activity.activity_type,
+                "duration_minutes": activity.duration_minutes,
+                "calories_burned": activity.calories_burned,
+                "distance_km": activity.distance_km,
+                "activity_date": activity.activity_date.isoformat() if activity.activity_date else None
+            },
+            "status_code": 200
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Database error", "message": str(e), "status_code": 500}), 500
+
+# --- 删除指定 ID 的运动记录 API ---
+# 规范：DELETE /activities/<activity_id>
+@activities_bp.route('/activities/<int:activity_id>', methods=['DELETE']) # <-- 修正这里，改为完整路径
+@token_required
+def delete_activity(activity_id):
+    current_user_id = g.user_id
+
+    activity = Activity.query.get(activity_id)
+
+    if not activity:
+        return jsonify({
+            "error": "Not Found",
+            "message": "未找到指定ID的运动记录。",
+            "status_code": 404
+        }), 404
+
+    if activity.user_id != current_user_id:
+        return jsonify({
+            "error": "Forbidden",
+            "message": "无权删除该运动记录。",
+            "status_code": 403
+        }), 403
+
+    try:
+        db.session.delete(activity)
+        db.session.commit()
+        return jsonify({
+            "message": "运动记录删除成功！",
+            "status_code": 200
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Database error", "message": str(e), "status_code": 500}), 500

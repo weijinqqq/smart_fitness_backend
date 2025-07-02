@@ -8,30 +8,52 @@ from models import FitnessPlan, db
 plan_bp = Blueprint('plan_bp', __name__)
 
 #---获取所有预设计划API---
-@plan_bp.route('/preset', methods=['GET'])
-
+@plan_bp.route('/fitness_plans/preset', methods=['GET'])
 def get_preset_plans():
     """
     获取系统预设健身计划API
     无需认证，所有用户可访问
     """
     try:
-        # 查询所有预设计划
+        # 调试点 1: 查询前
+        print("DEBUG: Attempting to query preset plans...")
         preset_plans = FitnessPlan.query.filter_by(is_preset=True).all()
-        
+        # 调试点 2: 查询后
+        print(f"DEBUG: Found {len(preset_plans)} preset plans.")
+
+        plans_list = []
+        for plan in preset_plans:
+            # 调试点 3: 尝试转换每个计划
+            try:
+                plan_dict = plan.to_dict()
+                plans_list.append(plan_dict)
+                print(f"DEBUG: Successfully converted plan ID {plan.id} to dict.")
+            except Exception as e_convert:
+                print(f"ERROR: Failed to convert plan ID {plan.id} to dict: {e_convert}")
+                # 如果转换失败，可以跳过这个计划或返回一个错误提示
+                # 为了调试，这里我们直接让它继续，看是否是某个特定计划的问题
+                plans_list.append({"id": plan.id, "error": str(e_convert)})  # 临时添加错误信息
+                continue  # 继续处理下一个计划
+
+        # 调试点 4: 准备返回 JSON
+        print(f"DEBUG: Final plans_list prepared: {plans_list}")
+
         return jsonify({
-            "count": len(preset_plans),
-            "plans": [plan.to_dict() for plan in preset_plans]
+            "count": len(plans_list),
+            "plans": plans_list
         }), 200
-        
+
     except Exception as e:
+        # 调试点 5: 捕获到更上层的错误
+        print(f"ERROR: An unexpected error occurred in get_preset_plans: {e}")
         return jsonify({
             "error": "Database error",
             "message": str(e)
         }), 500
 
+
 #---为用户创建计划API---
-@plan_bp.route('/users/<int:user_id>', methods=['POST'])
+@plan_bp.route('/users/<int:user_id>/fitness_plans', methods=['POST'])
 @token_required # 认证用户
 def create_or_select_plan(user_id):
     """
@@ -109,7 +131,7 @@ def create_or_select_plan(user_id):
         }), 500
 
 #---获取用户健身计划API---
-@plan_bp.route('/users/<int:user_id>', methods=['GET'])
+@plan_bp.route('/users/<int:user_id>/fitness_plans', methods=['GET'])
 @token_required # 认证用户
 def get_user_plans(user_id):
     """
@@ -138,3 +160,56 @@ def get_user_plans(user_id):
             "error": "Database error",
             "message": str(e)
         }), 500
+
+
+# --- 更新用户计划 API ---
+# 规范：PUT /users/<user_id>/fitness_plans/<plan_id>
+@plan_bp.route('/users/<int:user_id>/fitness_plans/<int:plan_id>', methods=['PUT'])  # <-- 修正这里，改为完整路径
+@token_required  # 认证用户
+def update_user_fitness_plan(user_id, plan_id):
+    """
+    更新用户健身计划API
+    请求体: JSON {status, end_date, etc.}
+    响应: 200 OK 或错误信息
+    """
+    current_user_id = g.user_id
+
+    if current_user_id != user_id:
+        return jsonify({
+            "error": "Forbidden",
+            "message": "无权更新其他用户的健身计划。",
+            "status_code": 403
+        }), 403
+
+    user_plan = FitnessPlan.query.filter_by(id=plan_id, user_id=user_id, is_preset=False).first()
+
+    if not user_plan:
+        return jsonify({
+            "error": "Not Found",
+            "message": "未找到指定健身计划或无权访问。",
+            "status_code": 404
+        }), 404
+
+    data = request.get_json()
+
+    if 'status' in data:
+        user_plan.status = data['status']
+    if 'end_date' in data:
+        user_plan.end_date = data['end_date']
+
+    try:
+        db.session.commit()
+        return jsonify({
+            "message": "健身计划更新成功！",
+            "data": {
+                "plan_id": user_plan.id,
+                "user_id": user_plan.user_id,
+                "plan_name": user_plan.plan_name,
+                "status": getattr(user_plan, 'status', None),
+                "end_date": getattr(user_plan, 'end_date', None)
+            },
+            "status_code": 200
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Database error", "message": f"健身计划更新失败：{str(e)}", "status_code": 500}), 500

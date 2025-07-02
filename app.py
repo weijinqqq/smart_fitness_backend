@@ -20,8 +20,8 @@ db.init_app(app) # 在这里将 db 对象与 app 实例绑定
 
 # 注册蓝图
 app.register_blueprint(user_bp) # <-- 注册蓝图
-app.register_blueprint(activities_bp, url_prefix='/activities') # 运动记录模块的路由前缀
-app.register_blueprint(plan_bp, url_prefix='/fitness_plans') # 健身计划模块的路由前缀
+app.register_blueprint(activities_bp) # 运动记录模块的路由前缀
+app.register_blueprint(plan_bp) # 健身计划模块的路由前缀
 
 # 您可以在这里添加其他蓝图的注册，例如：
 # from routes.activity_routes import activity_bp
