@@ -4,6 +4,7 @@ from models import db # 从 models.py 导入 db 对象
 from routes.user_routes import user_bp
 from routes.activities import activities_bp    # D 负责的运动记录模块
 from routes.plans import plan_bp     # D 负责的健身计划模块
+from routes.forum import forum_bp # 导入论坛蓝图
 from dotenv import load_dotenv
 
 load_dotenv(dotenv_path='.env.py') #关于认证装饰的设置
@@ -19,13 +20,12 @@ if app.config['SECRET_KEY'] is None:
 db.init_app(app) # 在这里将 db 对象与 app 实例绑定
 
 # 注册蓝图
-app.register_blueprint(user_bp) # <-- 注册蓝图
+app.register_blueprint(user_bp) # <注册用户蓝图
 app.register_blueprint(activities_bp) # 运动记录模块的路由前缀
 app.register_blueprint(plan_bp) # 健身计划模块的路由前缀
+app.register_blueprint(forum_bp) # 注册论坛蓝图
 
-# 您可以在这里添加其他蓝图的注册，例如：
-# from routes.activity_routes import activity_bp
-# app.register_blueprint(activity_bp, url_prefix='/api/v1/activities') # 可以添加 URL 前缀
+
 
 # 数据库初始化 (通常在 app.py 启动时执行一次)
 with app.app_context():

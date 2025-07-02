@@ -16,6 +16,8 @@ class User(db.Model):
     height = db.Column(db.Float)
     weight = db.Column(db.Float)
     age = db.Column(db.Integer)
+    posts = db.relationship('Post', backref='author', lazy=True, cascade="all, delete-orphan")
+    comments = db.relationship('Comment', backref='comment_author', lazy=True, cascade="all, delete-orphan")
     # fitness_goal = db.Column(db.String(200))
 
     def __repr__(self):
@@ -81,4 +83,49 @@ class FitnessPlan(db.Model):
             "content": plan_content,
             "is_preset": self.is_preset,
             "created_at": self.created_at.isoformat()
+        }
+
+# --- 新增：论坛帖子模型 (Post Model) ---
+class Post(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False) # 发帖人
+    title = db.Column(db.String(200), nullable=False) # 帖子标题
+    content = db.Column(db.Text, nullable=False) # 帖子内容
+    created_at = db.Column(db.DateTime, default=datetime.utcnow) # 创建时间
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow) # 更新时间
+
+    # 与评论的关系
+    comments = db.relationship('Comment', backref='post', lazy=True, cascade="all, delete-orphan")
+
+    def to_dict(self, include_comments=False):
+        data = {
+            "id": self.id,
+            "user_id": self.user_id,
+            "author_username": self.author.username if self.author else None,# 通过关系访问发帖人用户名
+            "title": self.title,
+            "content": self.content,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "comments_count": len(self.comments) # 实时计算评论数量
+        }
+        if include_comments:
+            data['comments'] = [comment.to_dict() for comment in self.comments]
+        return data
+
+# --- 新增：评论模型 (Comment Model) ---
+class Comment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    post_id = db.Column(db.Integer, db.ForeignKey('post.id'), nullable=False) # 所属帖子
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False) # 评论人
+    content = db.Column(db.Text, nullable=False) # 评论内容
+    created_at = db.Column(db.DateTime, default=datetime.utcnow) # 创建时间
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "post_id": self.post_id,
+            "user_id": self.user_id,
+            "author_username": self.comment_author.username if self.comment_author else None, # 通过关系访问评论人用户名
+            "content": self.content,
+            "created_at": self.created_at.isoformat() if self.created_at else None
         }
